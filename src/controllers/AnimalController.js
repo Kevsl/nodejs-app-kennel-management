@@ -8,13 +8,15 @@ const uploadDirectory = path.join(__dirname, 'uploads')
 app.set('views', path.join(__dirname, 'views'))
 app.set('view engine', 'ejs')
 
-const insertAnimal = async (req, res) => {
+const insertAnimalPicture = async (req, res) => {
+  let newFileName
   let storage = multer.diskStorage({
     destination: function (req, file, cb) {
       cb(null, uploadDirectory)
     },
     filename: function (req, file, cb) {
-      cb(null, `${file.fieldname}-${Date.now()}.jpg`)
+      newFileName = `${file.fieldname}-${Date.now()}.jpg`
+      cb(null, newFileName)
     },
   })
 
@@ -47,20 +49,41 @@ const insertAnimal = async (req, res) => {
     if (err) {
       res.send(err)
     } else {
-      res.send('Success, Image uploaded!')
+      res.send({ newFileName: newFileName })
     }
   })
-
-  //   try {
-  //     const sql = `SELECT * FROM category`
-  //     const [result] = await pool.query(sql)
-
-  //     res.status(200).json({ result })
-  //     return
-  //   } catch (error) {
-  //     console.log(error.stack)
-  //     res.status(500).json({ message: 'Erreur serveur' })
-  //   }
 }
 
-module.exports = { insertAnimal }
+const insertAnimal = async (req, res) => {
+  if (
+    !req.body.name ||
+    !req.body.category ||
+    !req.body.box ||
+    !req.body.departure ||
+    !req.body.arrival
+  ) {
+    res.status(400).send({ error: 'Missing fields' })
+  }
+
+  try {
+    const sql = `INSERT INTO animal VALUES (NULL,${parseInt(
+      req.body.category
+    )},"${req.body.name}",${new Date(
+      req.body.arrival
+    ).toLocaleDateString()},${new Date(
+      req.body.departure
+    ).toLocaleDateString()},"${req.body.image}",${parseInt(
+      req.body.client
+    )}, ${parseInt(req.body.box)})`
+    console.log(sql)
+
+    const [result] = await pool.query(sql)
+    res.status(200).json({ result })
+    return
+  } catch (error) {
+    console.log(error.stack)
+    res.status(500).json({ message: 'Erreur serveur' })
+  }
+}
+
+module.exports = { insertAnimalPicture, insertAnimal }
