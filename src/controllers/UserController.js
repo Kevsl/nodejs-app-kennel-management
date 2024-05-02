@@ -1,6 +1,7 @@
 const { pool } = require('../services/mysql')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const { transporter } = require('../services/mailer')
 require('dotenv').config()
 
 const register = async (req, res) => {
@@ -31,13 +32,33 @@ const register = async (req, res) => {
       const hash = await bcrypt.hash(password, 10)
 
       const sqlInsertRequest =
-        'INSERT INTO `client` VALUES (NULL, ?, ?, ?,?, ?)'
+        'INSERT INTO `client` VALUES (NULL, ?, ?, ?,?, ?,?,?)'
 
-      const insertValues = [name, phone, adress, email, hash]
+      const activationToken = await bcrypt.hash(email, 10)
+
+      const insertValues = [
+        name,
+        phone,
+        adress,
+        email,
+        hash,
+        false,
+        activationToken,
+      ]
 
       const [rows] = await pool.execute(sqlInsertRequest, insertValues)
 
       if (rows.affectedRows > 0) {
+        const info = await transporter.sendMail({
+          from: `${process.env.SMTP_EMAIL}`,
+          to: email,
+          subject: 'Email activation',
+          text: 'Activate your remail',
+          html: `<p> You need to activate your email, to access our services, please click on this link :
+                <a href="http://localhost:3111/user/activate/${token}">Activate your email</a>
+          </p>`,
+        })
+
         res.status(201).json({ success: 'registration successfull' })
         return
       } else {
@@ -62,11 +83,13 @@ const login = async (req, res) => {
 
   try {
     const values = [identifier, identifier]
-    const sql = `SELECT * FROM client INNER JOIN role ON client.id_role = role.id_role WHERE email_client =  ? OR name_client = ?`
+    const sql = `SELECT * FROM client INNER JOIN role ON client.id_role = role.id_role WHERE email_client =  ? OR name_client = ? AND isActive = 1`
     const [result] = await pool.query(sql, values)
 
     if (result.length === 0) {
-      res.status(401).json({ error: 'Invalid credentials' })
+      res
+        .status(401)
+        .json({ error: 'Invalid credentials or account not activated' })
       return
     } else {
       await bcrypt.compare(
@@ -87,6 +110,7 @@ const login = async (req, res) => {
             { expiresIn: '20d' }
           )
           console.log()
+
           res.status(200).json({ jwt: token, role: result[0].name_role })
           return
         }
@@ -111,4 +135,17 @@ const getAllUsers = async (req, res) => {
   }
 }
 
-module.exports = { register, login, getAllUsers }
+const testEmail = async (req, res) => {
+  const info = await transporter.sendMail({
+    from: `${process.env.SMTP_EMAIL}`,
+    to: 'speede078@gmail.com',
+    subject: 'Test',
+    text: 'Hello world?',
+    html: '<div> <h1>Email Subject ?</h1> <p> Paragraphe</p></div>',
+  })
+
+  console.log('Message sent: %s', info.messageId)
+  res.status(200).json(`Message send with the id ${info.messageId}`)
+}
+
+module.exports = { register, login, getAllUsers, testEmail }
